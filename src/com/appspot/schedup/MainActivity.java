@@ -1,8 +1,6 @@
 package com.appspot.schedup;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -12,21 +10,12 @@ import com.google.android.gms.gcm.GoogleCloudMessaging;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.app.Activity;
-import android.app.IntentService;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.TaskStackBuilder;
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.content.WakefulBroadcastReceiver;
 import android.util.Log;
 import android.view.KeyEvent;
-import android.view.Menu;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -42,15 +31,15 @@ public class MainActivity extends Activity {
 	private final static int PLAY_SERVICES_RESOLUTION_REQUEST = 9000;
 	protected GoogleCloudMessaging gcm;
 	protected AtomicInteger msgId = new AtomicInteger();
-	public final String TAG = MainActivity.class.toString();
-	protected SharedPreferences prefs;
+	public final String TAG = "SCHEDUP";
 	protected Context context;
+	private String gcmRegistrationId = "";
 	
 	/**
 	 * Substitute you own sender ID here. This is the project number you got
 	 * from the API Console, as described in "Getting Started."
 	 */
-	String SENDER_ID = "Your-Sender-ID";
+	String SENDER_ID = "3394140550";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,7 +51,7 @@ public class MainActivity extends Activity {
         webSettings.setJavaScriptEnabled(true);
         webSettings.setGeolocationEnabled(true);
         myWebView.setWebViewClient(new WebViewClient());
-        myWebView.addJavascriptInterface(new WebAppInterface(this), "Android");
+        myWebView.addJavascriptInterface(new WebAppInterface(this), "schedupAndroid");
         
         context = getApplicationContext();
         if (checkPlayServices()) {
@@ -71,6 +60,9 @@ public class MainActivity extends Activity {
 
             if (regid == null || regid.equals("")) {
                 registerInBackground();
+            }
+            else {
+            	gcmRegistrationId = regid;
             }
         } else {
             Log.i(TAG, "No valid Google Play Services APK found.");
@@ -126,43 +118,24 @@ public class MainActivity extends Activity {
         }
     }
     
-    private void registerInBackground() {
-        new AsyncTask() {
+	private void registerInBackground() {
+        new AsyncTask<Void,Void,String>() {
             @Override
-            protected String doInBackground(Object... params) {
-                String msg = "";
+            protected String doInBackground(Void... params) {
                 try {
                     if (gcm == null) {
                         gcm = GoogleCloudMessaging.getInstance(context);
                     }
                     String regid = gcm.register(SENDER_ID);
-                    msg = "Device registered, registration ID=" + regid;
-
-                    // You should send the registration ID to your server over HTTP,
-                    // so it can use GCM/HTTP or CCS to send messages to your app.
-                    // The request to your server should be authenticated if your app
-                    // is using accounts.
-                    sendRegistrationIdToBackend();
-
-                    // For this demo: we don't need to send it because the device
-                    // will send upstream messages to a server that echo back the
-                    // message using the 'from' address in the message.
-
-                    // Persist the regID - no need to register again.
                     storeRegistrationId(context, regid);
+                	Log.i(TAG, "bg regsitration: " + regid);
+                	gcmRegistrationId = regid;
+                    return "ok";
                 } catch (IOException ex) {
-                    msg = "Error :" + ex.getMessage();
-                    // If there is an error, don't just keep trying to register.
-                    // Require the user to click a button again, or perform
-                    // exponential back-off.
+                	Log.e(TAG, "bg regsitration failed", ex);
+                	return "error";
                 }
-                return msg;
             }
-
-            /*@Override
-            protected void onPostExecute(String msg) {
-                mDisplay.append(msg + "\n");
-            }*/
         }.execute(null, null, null);
     }    
 
@@ -189,45 +162,6 @@ public class MainActivity extends Activity {
         return getSharedPreferences(MainActivity.class.getSimpleName(),
                 Context.MODE_PRIVATE);
     }    
-
-    public class GcmBroadcastReceiver extends WakefulBroadcastReceiver {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            // Explicitly specify that GcmIntentService will handle the intent.
-            ComponentName comp = new ComponentName(context.getPackageName(),
-                    GcmIntentService.class.getName());
-            // Start the service, keeping the device awake while it is launching.
-            startWakefulService(context, (intent.setComponent(comp)));
-            setResultCode(Activity.RESULT_OK);
-        }
-    }
-
-    public static class GcmIntentService extends IntentService {
-        public static final int NOTIFICATION_ID = 1;
-        private NotificationManager mNotificationManager;
-        NotificationCompat.Builder builder;
-
-        public GcmIntentService() {
-            super("GcmIntentService");
-        }
-
-        @Override
-        protected void onHandleIntent(Intent intent) {
-            Bundle extras = intent.getExtras();
-            GoogleCloudMessaging gcm = GoogleCloudMessaging.getInstance(this);
-            // The getMessageType() intent parameter must be the intent you received
-            // in your BroadcastReceiver.
-            String messageType = gcm.getMessageType(intent);
-
-            if (!extras.isEmpty()) {  // has effect of unparcelling Bundle
-                if (GoogleCloudMessaging.
-                        MESSAGE_TYPE_MESSAGE.equals(messageType)) {
-                }
-            }
-            // Release the wake lock provided by the WakefulBroadcastReceiver.
-            GcmBroadcastReceiver.completeWakefulIntent(intent);
-        }
-    }
     
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
@@ -240,33 +174,6 @@ public class MainActivity extends Activity {
         // system behavior (probably exit the activity)
         return super.onKeyDown(keyCode, event);
     }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.main, menu);
-        return true;
-    }
-    
-    protected int notifyUser(String title, String body) {
-    	NotificationCompat.Builder mBuilder =
-    	        new NotificationCompat.Builder(this)
-    	        .setSmallIcon(R.drawable.ic_launcher)
-    	        .setContentTitle(title)
-    	        .setContentText(body)
-    	        .setAutoCancel(true);
-    	// Creates an explicit intent for an Activity in your app
-    	Intent resultIntent = new Intent(this, MainActivity.class);
-    	PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, resultIntent, Intent.FLAG_ACTIVITY_NEW_TASK);
-    	
-    	mBuilder.setContentIntent(pendingIntent);
-    	NotificationManager mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-    	// mId allows you to update the notification later on.
-    	int mId = notificationIdCounter;
-    	notificationIdCounter++;
-    	mNotificationManager.notify(mId, mBuilder.build());
-    	return mId;
-    }
     
     public class WebAppInterface {
         Context mContext;
@@ -278,8 +185,8 @@ public class MainActivity extends Activity {
 
         /** Show a toast from the web page */
         @JavascriptInterface
-        public List<String> searchContacts(String prefix) {
-        	return new ArrayList<String>();
+        public String getGCMRegId() {
+        	return gcmRegistrationId;
         }
     }
     
