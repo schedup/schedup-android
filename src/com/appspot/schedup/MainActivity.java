@@ -16,7 +16,9 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.util.Log;
 import android.view.KeyEvent;
+import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -33,7 +35,7 @@ public class MainActivity extends Activity {
 	protected AtomicInteger msgId = new AtomicInteger();
 	public final String TAG = "SCHEDUP";
 	protected Context context;
-	private String gcmRegistrationId = "";
+	protected String gcmRegistrationId = "moishe";
 	
 	/**
 	 * Substitute you own sender ID here. This is the project number you got
@@ -51,8 +53,15 @@ public class MainActivity extends Activity {
         webSettings.setJavaScriptEnabled(true);
         webSettings.setGeolocationEnabled(true);
         myWebView.setWebViewClient(new WebViewClient());
-        myWebView.addJavascriptInterface(new WebAppInterface(this), "schedupAndroid");
+        /*myWebView.setWebChromeClient(new WebChromeClient() {
+          public boolean onConsoleMessage(ConsoleMessage cm) {
+            Log.i("SCHEDUP WEB", cm.message() + " (" + cm.sourceId() + ":" + cm.lineNumber());
+            return true;
+          }
+        });*/
         
+        myWebView.addJavascriptInterface(new WebAppInterface(), "schedupAndroid");
+
         context = getApplicationContext();
         if (checkPlayServices()) {
         	gcm = GoogleCloudMessaging.getInstance(this);
@@ -62,14 +71,12 @@ public class MainActivity extends Activity {
                 registerInBackground();
             }
             else {
+            	Log.i(TAG, "setting gcmRegistrationId to " + regid);
             	gcmRegistrationId = regid;
             }
         } else {
-            Log.i(TAG, "No valid Google Play Services APK found.");
-        }
-        
-        if (!checkPlayServices()) {
-        	GooglePlayServicesUtil.getErrorDialog(GooglePlayServicesUtil.isGooglePlayServicesAvailable(context), this, 0);
+            Log.e(TAG, "No valid Google Play Services APK found.");
+            //GooglePlayServicesUtil.getErrorDialog(GooglePlayServicesUtil.isGooglePlayServicesAvailable(context), this, 0);
         }
     }
     
@@ -129,6 +136,7 @@ public class MainActivity extends Activity {
                     String regid = gcm.register(SENDER_ID);
                     storeRegistrationId(context, regid);
                 	Log.i(TAG, "bg regsitration: " + regid);
+                	Log.i(TAG, "setting gcmRegistrationId to " + regid);
                 	gcmRegistrationId = regid;
                     return "ok";
                 } catch (IOException ex) {
@@ -176,16 +184,9 @@ public class MainActivity extends Activity {
     }
     
     public class WebAppInterface {
-        Context mContext;
-
-        /** Instantiate the interface and set the context */
-        WebAppInterface(Context c) {
-            mContext = c;
-        }
-
-        /** Show a toast from the web page */
         @JavascriptInterface
         public String getGCMRegId() {
+        	Log.i(TAG, "regid = '" + gcmRegistrationId + "'");
         	return gcmRegistrationId;
         }
     }
